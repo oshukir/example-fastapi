@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import auth, post, user, vote
+from .routers import auth, post, user, vote, comm
 
 app = FastAPI()
 origins = [
@@ -21,6 +21,7 @@ app.include_router(post.router)
 app.include_router(user.router)
 app.include_router(auth.router)
 app.include_router(vote.router)
+app.include_router(comm.router)
 
 @app.get("/")
 def get_empty():

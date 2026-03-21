@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 
 class UserCreate(BaseModel):
@@ -8,15 +8,32 @@ class UserCreate(BaseModel):
     password: str
 
 class UserOut(BaseModel):
-    id: int
     email: EmailStr
-    created_at: datetime
     class Config:
         orm_mode = True
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+
+
+
+class CommentBase(BaseModel):
+    post_id: int
+    content: str
+    owner: UserOut
+
+class CommentOut(BaseModel):
+    content: str
+    owner: UserOut
+    class Config:
+        orm_mode = True
+        from_attributes = True
+
+class CommentUpdate(BaseModel):
+    content: str
 
 
 
@@ -28,6 +45,7 @@ class PostBase(BaseModel):
     owner_id: int
     owner: UserOut
     published: bool = True
+    discussion: List[CommentOut]
 
 class PostCreate(BaseModel):
     title: str
@@ -39,6 +57,7 @@ class PostUpdate(PostBase):
 class PostOUT(BaseModel):
     Post: PostBase
     votes: int
+    comms: int
     class Config:
         orm_mode = True
         from_attributes = True
@@ -62,6 +81,17 @@ class TokenData(BaseModel):
 
 
 
+
+
 class Vote_Create(BaseModel):
     post_id: int
     dir: bool
+
+
+
+class UserPublicProfile(BaseModel):
+    user: UserOut
+    votes: int
+    notes: int
+    posts: List[PostReturn]
+    

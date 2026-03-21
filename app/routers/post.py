@@ -4,7 +4,7 @@ from fastapi import Response
 from fastapi import status, Depends
 from fastapi import HTTPException
 from sqlalchemy import func
-from .. import models, schemas, utils, oauth2
+from .. import models, schemas, oauth2
 from ..database import get_db, Session
 
 router = APIRouter(
@@ -18,9 +18,12 @@ def get_posts(db: Session = Depends(get_db),
               limit: int = 10, skip: int = 0, search: Optional[str] = ""): 
 
     # Обязательно используем .label("votes"), чтобы Pydantic знал, куда положить число
-    results = db.query(models.Post, func.count(models.Vote.post_id).label("votes")).join(
-        models.Vote, models.Vote.post_id == models.Post.id, isouter=True).group_by(
-        models.Post.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
+    results = db.query(models.Post, func.count(models.Vote.post_id).label("votes"), 
+                    func.count(models.Comment.post_id).label("comms")).join(
+                    models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
+                    models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
+                    models.Post.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
+    
 
     return results
 
@@ -41,11 +44,13 @@ def get_latest_post(db: Session = Depends(get_db), current_user: models.User = D
     post = db.query(models.Post).order_by(models.Post.id.desc()).first()
     return post
 
-@router.get("/{id}", response_model=schemas.PostReturn)
+@router.get("/{id}", response_model=schemas.PostOUT)
 def get_posts(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
-    post = db.query(models.Post, func.count(models.Vote.post_id).label("votes")).join(
-            models.Vote, models.Vote.post_id == models.Post.id, isouter=True).group_by(models.Post.id).filter(
-            models.Post.id == id).first()
+    post = db.query(models.Post, func.count(models.Vote.post_id).label("votes"), 
+                    func.count(models.Comment.post_id).label("comms")).join(
+                    models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
+                    models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
+                    models.Post.id).filter(models.Post.id == id).first()
 
     if not post:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
@@ -91,3 +96,25 @@ def update_post(id: int, updated_post: schemas.PostUpdate, db: Session = Depends
     db.commit()
 
     return post_query.first()
+
+@router.get("/{id}/comments", response_model=List[schemas.CommentOut])
+def get_post_comments(
+    id: int,
+    db: Session = Depends(get_db),
+    limit: int = 10,
+    skip: int = 0,
+    search: Optional[str] = ""
+):
+    post = db.query(models.Post).filter(models.Post.id == id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Post with id {id} not found"
+        )
+    
+    comments = db.query(models.Comment).filter(
+        models.Comment.post_id == id,
+        models.Comment.content.contains(search)
+    ).limit(limit).offset(skip).all()
+
+    return comments
