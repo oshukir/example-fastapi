@@ -1,9 +1,9 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter
 from fastapi import Response
 from fastapi import status, Depends
 from fastapi import HTTPException
-from sqlalchemy import func
+from sqlalchemy import distinct, func
 from .. import models, schemas, oauth2
 from ..database import get_db, Session
 
@@ -15,15 +15,24 @@ router = APIRouter(
 @router.get("/", response_model=List[schemas.PostOUT])
 def get_posts(db: Session = Depends(get_db), 
               current_user: models.User = Depends(oauth2.get_current_user), 
-              limit: int = 10, skip: int = 0, search: Optional[str] = ""): 
+              limit: int = 10, skip: int = 0, search: Optional[str] = "",
+              sort: Optional[Literal["latest", "popular"]] = "latest"): 
 
     # Обязательно используем .label("votes"), чтобы Pydantic знал, куда положить число
-    results = db.query(models.Post, func.count(models.Vote.post_id).label("votes"), 
-                    func.count(models.Comment.post_id).label("comms")).join(
-                    models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
-                    models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
-                    models.Post.id).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
-    
+    if sort == "latest":
+        results = db.query(models.Post, func.count(distinct(models.Vote.post_id)).label("votes"), 
+                        func.count(distinct(models.Comment.post_id)).label("comms")).join(
+                        models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
+                        models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
+                        models.Post.id).filter(models.Post.title.contains(search)).order_by(models.Post.created_at.desc()).limit(
+                        limit).offset(skip).all()
+    else:
+        results = db.query(models.Post, func.count(distinct(models.Vote.post_id)).label("votes"), 
+                        func.count(distinct(models.Comment.post_id)).label("comms")).join(
+                        models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
+                        models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
+                        models.Post.id).filter(models.Post.title.contains(search)).order_by(
+                        func.count(distinct(models.Vote.post_id)).desc()).limit(limit).offset(skip).all()
 
     return results
 
