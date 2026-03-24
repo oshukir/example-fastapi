@@ -3,12 +3,19 @@ from datetime import datetime
 from typing import Optional, List
 
 
+class PostReturn(BaseModel):
+    title: str
+    content: str
+    class Config:
+        orm_mode = True
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
 
 class UserOut(BaseModel):
     email: EmailStr
+    posts: List[PostReturn]
     class Config:
         orm_mode = True
 
@@ -62,11 +69,6 @@ class PostOUT(BaseModel):
         orm_mode = True
         from_attributes = True
 
-class PostReturn(BaseModel):
-    title: str
-    content: str
-    class Config:
-        orm_mode = True
 
 
 
@@ -90,8 +92,10 @@ class Vote_Create(BaseModel):
 
 
 class UserPublicProfile(BaseModel):
-    user: UserOut
+    User: UserOut
     votes: int
     notes: int
-    posts: List[PostReturn]
     
+    class Config:
+        from_attributes = True
+        orm_mode = True
