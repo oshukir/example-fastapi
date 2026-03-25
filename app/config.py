@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGO: str
     ACCESS_EXPIRED: int
+    APP_VERSION: str
+    DEBUG_MODE: bool = False
 
     class Config:
         env_file = ".env"

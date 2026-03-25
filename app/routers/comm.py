@@ -47,7 +47,6 @@ def get_comments(id: int, db: Session = Depends(get_db), current_user: models.Us
 def update_comment(id: int, comm: schemas.CommentUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
     query = db.query(models.Comment).where(models.Comment.id == id)
     comment = query.first()
-    print(comment)
     if not comment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Comment with id {id} not found")
