@@ -30,7 +30,6 @@ class UserLogin(BaseModel):
 class CommentBase(BaseModel):
     post_id: int
     content: str
-    owner: UserOut
 
 class CommentOut(BaseModel):
     content: str
@@ -57,7 +56,8 @@ class PostBase(BaseModel):
 class PostCreate(BaseModel):
     title: str
     content: str
-
+    is_private: Optional[bool] = False
+ 
 class PostUpdate(PostBase):
     published: bool
 

@@ -12,10 +12,14 @@ router = APIRouter(
 
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.CommentOut)
 def create_comment(comment: schemas.CommentBase, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
-    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
-    if not post:
+    post_query_result = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    if not post_query_result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Post with id {comment.post_id} is not found")
+    
+    if current_user.id != post_query_result.owner_id and post_query_result.is_private == True:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"post with id {post_query_result.id} is private")
     
     new_comment = models.Comment(
         **comment.dict(),

@@ -9,13 +9,14 @@ class Post(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
+    is_private = Column(Boolean, server_default='FALSE', nullable=False)
     published = Column(Boolean, server_default='TRUE', 
                        nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('now()'))
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
-    owner = relationship("User")
+    owner = relationship("User", back_populates="posts")
     discussion = relationship("Comment")
 
 class Comment(Base):
@@ -38,7 +39,7 @@ class User(Base):
     created_at = Column(TIMESTAMP(timezone=True), 
                         nullable=False, server_default=text('now()'))
     
-    posts = relationship("Post")
+    posts = relationship("Post", back_populates="owner")
 
 class Vote(Base):
     __tablename__ = "votes"

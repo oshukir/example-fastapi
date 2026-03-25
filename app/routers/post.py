@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from fastapi import Response
 from fastapi import status, Depends
 from fastapi import HTTPException
-from sqlalchemy import distinct, func
+from sqlalchemy import distinct, func, or_
 from .. import models, schemas, oauth2
 from ..database import get_db, Session
 
@@ -17,22 +17,31 @@ def get_posts(db: Session = Depends(get_db),
               current_user: models.User = Depends(oauth2.get_current_user), 
               limit: int = 10, skip: int = 0, search: Optional[str] = "",
               sort: Optional[Literal["latest", "popular"]] = "latest"): 
+    
+    query = db.query(
+        models.Post, 
+        func.count(distinct(models.Vote.post_id)).label("votes"), 
+        func.count(distinct(models.Comment.post_id)).label("comms")
+    ).join(
+        models.Vote, models.Vote.post_id == models.Post.id, isouter=True
+    ).join(
+        models.Comment, models.Comment.post_id == models.Post.id, isouter=True
+    ).group_by(
+        models.Post.id
+    ).filter(
+        models.Post.title.contains(search),
+        or_(
+            models.Post.is_private == False,
+            models.Post.owner_id == current_user.id
+        )
+    )
 
-    # Обязательно используем .label("votes"), чтобы Pydantic знал, куда положить число
     if sort == "latest":
-        results = db.query(models.Post, func.count(distinct(models.Vote.post_id)).label("votes"), 
-                        func.count(distinct(models.Comment.post_id)).label("comms")).join(
-                        models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
-                        models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
-                        models.Post.id).filter(models.Post.title.contains(search)).order_by(models.Post.created_at.desc()).limit(
-                        limit).offset(skip).all()
+        query = query.order_by(models.Post.created_at.desc())
     else:
-        results = db.query(models.Post, func.count(distinct(models.Vote.post_id)).label("votes"), 
-                        func.count(distinct(models.Comment.post_id)).label("comms")).join(
-                        models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
-                        models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
-                        models.Post.id).filter(models.Post.title.contains(search)).order_by(
-                        func.count(distinct(models.Vote.post_id)).desc()).limit(limit).offset(skip).all()
+        query = query.order_by(func.count(distinct(models.Vote.post_id)).desc())
+
+    results = query.limit(limit).offset(skip).all()
 
     return results
 
@@ -55,21 +64,25 @@ def get_latest_post(db: Session = Depends(get_db), current_user: models.User = D
 
 @router.get("/{id}", response_model=schemas.PostOUT)
 def get_posts(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
-    post = db.query(models.Post, func.count(models.Vote.post_id).label("votes"), 
+    post_query_result = db.query(models.Post, func.count(models.Vote.post_id).label("votes"), 
                     func.count(models.Comment.post_id).label("comms")).join(
                     models.Vote, models.Vote.post_id == models.Post.id, isouter=True).join(
                     models.Comment, models.Comment.post_id == models.Post.id, isouter=True).group_by(
                     models.Post.id).filter(models.Post.id == id).first()
 
-    if not post:
+    if not post_query_result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"post with id {id} not found")
+    
+    if current_user.id != post_query_result.Post.owner_id and post_query_result.Post.is_private == True:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"post with id {id} is private")
     
     # if post.owner_id != current_user.id:
     #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
     #                         detail=f"not authorised to perform request")
     
-    return post
+    return post_query_result
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
@@ -110,6 +123,7 @@ def update_post(id: int, updated_post: schemas.PostUpdate, db: Session = Depends
 def get_post_comments(
     id: int,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
     limit: int = 10,
     skip: int = 0,
     search: Optional[str] = ""
@@ -120,6 +134,10 @@ def get_post_comments(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Post with id {id} not found"
         )
+    
+    if current_user.id != post.owner_id and post.is_private == True:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"post with id {id} is private")
     
     comments = db.query(models.Comment).filter(
         models.Comment.post_id == id,

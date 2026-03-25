@@ -3,8 +3,8 @@ from fastapi import APIRouter
 from fastapi import Response
 from fastapi import status, Depends
 from fastapi import HTTPException
-from sqlalchemy import distinct, func
-from .. import models, schemas, utils
+from sqlalchemy import and_, distinct, func, or_
+from .. import models, schemas, utils, oauth2
 from ..database import get_db, Session
 
 router = APIRouter(
@@ -28,7 +28,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{id}", response_model=schemas.UserPublicProfile)
-def get_user(id: int, db: Session = Depends(get_db)):
+def get_user(id: int, db: Session = Depends(get_db), current_user: models.User = Depends(oauth2.get_current_user)):
     user = db.query(models.User).filter(models.User.id == id).first()
 
 
@@ -39,7 +39,7 @@ def get_user(id: int, db: Session = Depends(get_db)):
     profile = db.query(
         models.User, 
         func.count(distinct(models.Post.id)).label("notes"),
-        func.count(models.Vote.post_id).label("votes")
+        func.count(distinct(models.Vote.post_id)).label("votes")
     ).join(
         models.Post, models.Post.owner_id == models.User.id, isouter=True
     ).join(
@@ -47,9 +47,21 @@ def get_user(id: int, db: Session = Depends(get_db)):
     ).group_by(
         models.User.id
     ).filter(
-        models.User.id == id
+        models.User.id == id,
     ).first()
 
     
+
+    filtered_posts = db.query(models.Post).filter(
+        models.Post.owner_id == id,
+        or_(
+            models.Post.is_private == False,
+            models.Post.owner_id == current_user.id
+        )
+    ).all()
+
+    # 3. Перезаписываем список постов в объекте User перед возвратом
+    # Теперь Pydantic возьмет этот уже отфильтрованный список
+    profile.User.posts = filtered_posts
 
     return profile
